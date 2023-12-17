@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canvas Drawing</title>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+
+      #container {
+        display: flex;
+        align-items: flex-start;
+      }
+
+      #leftSection {
+        margin-right: 20px;
+      }
+
+      #canvasContainer {
+        position: relative;
+      }
+
+      #drawingCanvas {
+        border: 2px solid #4285f4;
+        margin-bottom: 20px;
+        transition: border-color 0.5s ease-in-out;
+      }
+
+      button {
+        padding: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+      }
+
+      button:hover {
+        background-color: #e0e0e0;
+      }
+
+      #controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      #canvasContainer button {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      #executeDrawing {
+        padding: 15px;
+        background-color: #4caf50;
+        color: white;
+        font-weight: bold;
+      }
+
+      #executeDrawing:hover {
+        background-color: #45a049;
+      }
+
+      #copyCoordinates {
+        padding: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+      }
+
+      #copyCoordinates:hover {
+        background-color: #e0e0e0;
+      }
+
+      #coordinates {
+        width: 400px;
+        height: 200px;
+        overflow-y: auto;
+        border: 2px solid #333;
+        padding: 10px;
+        background-color: #f5f5f5;
+        white-space: pre-wrap;
+      }
+
+      #sizeDisplay {
+        font-size: 14px;
+        margin-bottom: 10px;
+      }
+
+      #pointCounter {
+        font-size: 16px;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="leftSection">
+        <div id="canvasContainer">
+          <canvas id="drawingCanvas" width="800" height="800"></canvas>
+          <button onclick="clearCanvas()">Clear Canvas</button>
+        </div>
+      </div>
+      <div id="controls">
+        <button id="executeDrawing" onclick="executeDrawing()">
+          Execute Drawing
+        </button>
+        <button id="copyCoordinates" onclick="copyCoordinates()">
+          Copy Coordinates
+        </button>
+        <div id="coordinates"></div>
+        <div id="sizeDisplay">JSON Size: <span id="jsonSize">0 B</span></div>
+        <div id="pointCounter">Total Points: <span id="counter">0</span></div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("drawingCanvas");
+      const context = canvas.getContext("2d");
+
+      const MAX_POINTS = 50;
+      let totalPoints = 0;
+      let coordinates = [[]];
+      const jsonSizeElement = document.getElementById("jsonSize");
+      const counterElement = document.getElementById("counter");
+      const coordinatesDiv = document.getElementById("coordinates");
+      const executeDrawingBtn = document.getElementById("executeDrawing");
+
+      let isDoubleClick = false;
+
+      canvas.addEventListener("mousedown", handleMouseDown);
+      canvas.addEventListener("dblclick", handleDoubleClick);
+
+      function handleMouseDown(e) {
+        if (isDoubleClick) {
+          isDoubleClick = false;
+          return;
+        }
+
+        if (totalPoints >= MAX_POINTS) {
+          alert(`Maximum ${MAX_POINTS} points allowed.`);
+          return;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const x = Math.floor((e.clientX - rect.left) * scaleX);
+        const y = Math.floor((e.clientY - rect.top) * scaleY);
+
+        totalPoints++;
+        counterElement.textContent = totalPoints;
+
+        if (
+          coordinates[coordinates.length - 1].length === 0 ||
+          coordinates[coordinates.length - 1][0][0] !== x ||
+          coordinates[coordinates.length - 1][0][1] !== y
+        ) {
+          coordinates[coordinates.length - 1].push([x, y]);
+
+          context.fillStyle = "#000";
+          context.beginPath();
+          context.arc(x / scaleX, y / scaleY, 2, 0, 2 * Math.PI);
+          context.fill();
+
+          if (coordinates[coordinates.length - 1].length > 1) {
+            context.beginPath();
+            context.moveTo(
+              coordinates[coordinates.length - 1][
+                coordinates[coordinates.length - 1].length - 2
+              ][0] / scaleX,
+              coordinates[coordinates.length - 1][
+                coordinates[coordinates.length - 1].length - 2
+              ][1] / scaleY
+            );
+            context.lineTo(x / scaleX, y / scaleY);
+            context.stroke();
+          }
+
+          updateCoordinates();
+        }
+      }
+
+      function handleDoubleClick() {
+        isDoubleClick = true;
+        endSegment();
+      }
+
+      function endSegment() {
+        const lastSegment = coordinates[coordinates.length - 1];
+        if (
+          lastSegment.length > 1 &&
+          JSON.stringify(lastSegment[0]) ===
+            JSON.stringify(lastSegment[lastSegment.length - 1])
+        ) {
+          // Skip creating a new segment if the last and first coordinates are the same
+          return;
+        }
+        coordinates.push([]);
+      }
+
+      function clearCanvas() {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        coordinates = [[]];
+        totalPoints = 0;
+        updateCoordinates();
+      }
+
+      function updateCoordinates() {
+        const jsonCoordinates = { coordinates };
+        const jsonSize = new Blob([JSON.stringify(jsonCoordinates, null, 2)])
+          .size;
+        jsonSizeElement.textContent = formatBytes(jsonSize);
+        coordinatesDiv.textContent = JSON.stringify(jsonCoordinates, null, 2);
+        counterElement.textContent = totalPoints.toString();
+
+        executeDrawingBtn.disabled = totalPoints >= MAX_POINTS;
+      }
+
+      function copyCoordinates() {
+        const coordinatesText = coordinatesDiv.textContent;
+        navigator.clipboard
+          .writeText(coordinatesText)
+          .then(() => alert("Coordinates copied to clipboard"))
+          .catch((err) => console.error("Error copying coordinates:", err));
+      }
+
+      async function executeDrawing() {
+        try {
+          disableUI(true);
+
+          const response = await fetch("http://localhost:3000/execute", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ coordinates }),
+          });
+
+          const result = await response.json();
+
+          disableUI(false);
+
+          console.log(result);
+
+          alert("Drawing executed successfully!");
+        } catch (error) {
+          console.error("Error executing drawing:", error);
+
+          disableUI(false);
+
+          alert("Error executing drawing. Please try again.");
+        }
+      }
+
+      function disableUI(disable) {
+        const buttons = document.querySelectorAll("#controls button");
+        buttons.forEach((button) => {
+          button.disabled = disable;
+        });
+      }
+
+      function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return "0 Bytes";
+
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+        return (
+          parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i]
+        );
+      }
+    </script>
+  </body>
+</html>
